@@ -41,8 +41,10 @@ python -m app.main AAPL --with-content --max-articles 3
 # 7) 抓一篇指定文章正文
 python -m app.main --article "https://finance.yahoo.com/m/<uuid>/xxx.html"
 
-# 8) 启动 HTTP 服务
-python -m app.main --serve --port 8080
+# 8) 启动 HTTP 服务（默认端口已改为 8090）
+python -m app.main --serve
+# 或显式指定
+python -m app.main --serve --port 8090
 ```
 
 ## HTTP API
@@ -50,28 +52,28 @@ python -m app.main --serve --port 8080
 先启动服务（会占用当前终端，按 `Ctrl+C` 停止）：
 
 ```bash
-python -m app.main --serve --port 8080
+python -m app.main --serve --port 8090
 ```
 
 然后在浏览器或另一个终端访问：
 
 ```text
-http://localhost:8080/                              # 首页说明
-http://localhost:8080/docs                          # 交互式 API 文档
+http://localhost:8090/                              # 首页说明
+http://localhost:8090/docs                          # 交互式 API 文档
 
 # ★ 推荐：统一搜索接口（ticker / query / 时间区间 任意组合）
-http://localhost:8080/api/search?count=20                                  # 不传条件 → 最新财经头条
-http://localhost:8080/api/search?ticker=AAPL&count=5                       # 按股票代码
-http://localhost:8080/api/search?query=AI&count=10                         # 按关键词模糊搜索
-http://localhost:8080/api/search?ticker=AAPL&query=iphone                  # 股票 + 关键词
-http://localhost:8080/api/search?since=2026-06-01&until=2026-06-23         # 按时间区间
-http://localhost:8080/api/search?ticker=AAPL&since=2026-06-01              # 股票 + 起始时间
-http://localhost:8080/api/search?query=AI&with_content=true&max_articles=3 # 顺带抓正文
+http://localhost:8090/api/search?count=20                                  # 不传条件 → 最新财经头条
+http://localhost:8090/api/search?ticker=AAPL&count=5                       # 按股票代码
+http://localhost:8090/api/search?query=AI&count=10                         # 按关键词模糊搜索
+http://localhost:8090/api/search?ticker=AAPL&query=iphone                  # 股票 + 关键词
+http://localhost:8090/api/search?since=2026-06-01&until=2026-06-23         # 按时间区间
+http://localhost:8090/api/search?ticker=AAPL&since=2026-06-01              # 股票 + 起始时间
+http://localhost:8090/api/search?query=AI&with_content=true&max_articles=3 # 顺带抓正文
 
 # 兼容老接口
-http://localhost:8080/api/news/AAPL?count=5&tab=news
-http://localhost:8080/api/news?count=20
-http://localhost:8080/api/article?link=<encoded url>
+http://localhost:8090/api/news/AAPL?count=5&tab=news
+http://localhost:8090/api/news?count=20
+http://localhost:8090/api/article?link=<encoded url>
 ```
 
 命令行查询需在**另一个终端**运行，不能与 `--serve` 同时占用同一窗口：
@@ -87,8 +89,8 @@ python -m app.main MSFT --count 20 --tab all
 |------|------|--------|
 | `ticker` | 股票代码（可选） | 空 |
 | `query` | 关键词（模糊匹配标题/摘要/发布机构/正文，多词以空格分隔，需全部命中） | 空 |
-| `since` | 起始时间，支持 `YYYY-MM-DD` / `YYYY-MM-DD HH:MM` / ISO8601 | 空 |
-| `until` | 截止时间，格式同 `since` | 空 |
+| `since` | 起始时间，支持 `YYYY-MM-DD` / `YYYY-MM-DD HH:MM` / ISO8601（无时区时按中国时间 UTC+8） | 空 |
+| `until` | 截止时间，格式同 `since`（无时区时按中国时间 UTC+8） | 空 |
 | `count` | 新闻条数 | `20`（1-200） |
 | `tab` | 仅 `ticker` 模式生效（`news` / `all` / `press releases`） | `news` |
 | `with_content` | 是否抓取每条新闻的正文 | `false` |
@@ -104,6 +106,8 @@ python -m app.main MSFT --count 20 --tab all
 | 空 | 空 | 抓每日财经头条 |
 
 `since` / `until` 任意组合：单传则形成开区间；都不传则返回最新新闻。
+
+说明：当仅传时间、不传 `query` 时，系统会自动扩展多个财经主题关键词进行聚合抓取，再执行时间过滤，以尽量返回满足 `count` 的结果。
 
 ### `/api/news/{ticker}` 参数（旧接口）
 

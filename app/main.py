@@ -302,7 +302,7 @@ def run_cli() -> None:
     # action="store_true" 表示这是一个布尔开关，写了就为 True
     parser.add_argument("--serve", action="store_true", help="Start HTTP server")
     parser.add_argument("--host", default="0.0.0.0")
-    parser.add_argument("--port", type=int, default=8080)
+    parser.add_argument("--port", type=int, default=8090)
 
     # ---- 每日财经头条相关参数 ----
     # --market 开关：开启后忽略 ticker，抓取雅虎财经全站头条

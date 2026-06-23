@@ -14,7 +14,8 @@ import time                # 提供 sleep 等时间相关函数
 import urllib.error        # urllib 的异常定义
 import urllib.parse        # URL 编码工具（类似 Java 的 URLEncoder）
 import urllib.request      # urllib 是 Python 内置的 HTTP 客户端（类似 Java 的 HttpURLConnection）
-from datetime import datetime, timezone  # 时间戳与 ISO8601 转换（类似 Java 的 Instant）
+from datetime import datetime, timedelta, timezone  # 时间戳与 ISO8601 转换（类似 Java 的 Instant）
+from email.utils import parsedate_to_datetime
 
 # 第三方库 yfinance：封装了 Yahoo Finance 的数据抓取
 import yfinance as yf      # `as yf` 是给模块起别名（类似 Java 没有，但相当于 import 简写）
@@ -53,6 +54,23 @@ YAHOO_SEARCH_URL = (
 # 抓「每日头条」时使用的默认搜索关键词
 # Yahoo Search 接口要求必须有 q 参数，这里用通用关键词来获取大盘新闻
 DEFAULT_MARKET_QUERIES = ("stock market", "finance", "economy")
+MARKET_TIME_RANGE_QUERIES = (
+    "wall street",
+    "nasdaq",
+    "dow jones",
+    "s&p 500",
+    "earnings",
+    "inflation",
+    "federal reserve",
+    "bond yield",
+    "oil price",
+    "gold price",
+    "ai stocks",
+    "spacex",
+)
+
+# 中国标准时间（UTC+8）：当用户输入 since/until 未显式带时区时，按该时区解释
+CHINA_TZ = timezone(timedelta(hours=8))
 
 
 # ============== 自定义异常 ==============
@@ -678,7 +696,7 @@ def get_news_with_content(
 # 类似 Spring Boot 里把多个 @GetMapping 整合成一个查询条件对象。
 # ============================================================
 
-def _parse_datetime(value: str | None) -> datetime | None:
+def _parse_datetime(value: str | None, *, end_of_day: bool = False) -> datetime | None:
     """
     把用户传入的时间字符串解析成 timezone-aware 的 datetime。
     支持以下常见格式：
@@ -693,6 +711,8 @@ def _parse_datetime(value: str | None) -> datetime | None:
     text = value.strip()
     if not text:
         return None
+
+    parsed_by_date_only = bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", text))
 
     # ISO8601 中的 Z 表示 UTC，Python 的 fromisoformat 在 3.11+ 才直接支持 Z
     iso = text.replace("Z", "+00:00")
@@ -713,10 +733,14 @@ def _parse_datetime(value: str | None) -> datetime | None:
                 f"无法解析时间 '{value}'，请使用 ISO8601 或 YYYY-MM-DD[ HH:MM[:SS]] 格式"
             )
 
-    # 如果用户没带时区，默认按 UTC 处理（Yahoo 的 pubDate 也是 UTC）
+    # 如果用户传的是纯日期且用于 until，扩展到当天结束，符合直觉查询语义
+    if end_of_day and parsed_by_date_only:
+        dt = dt + timedelta(days=1) - timedelta(microseconds=1)
+
+    # 如果用户没带时区，默认按中国时区（UTC+8）解释，再统一转 UTC 比较
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt
+        dt = dt.replace(tzinfo=CHINA_TZ)
+    return dt.astimezone(timezone.utc)
 
 
 def _article_datetime(article: NewsArticle) -> datetime | None:
@@ -725,13 +749,22 @@ def _article_datetime(article: NewsArticle) -> datetime | None:
     """
     if not article.pub_date:
         return None
-    try:
-        dt = datetime.fromisoformat(article.pub_date.replace("Z", "+00:00"))
-    except ValueError:
+
+    text = article.pub_date.strip()
+    if not text:
         return None
+
+    try:
+        dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        try:
+            dt = parsedate_to_datetime(text)
+        except (TypeError, ValueError):
+            return None
+
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    return dt
+    return dt.astimezone(timezone.utc)
 
 
 def _matches_query(article: NewsArticle, query: str) -> bool:
@@ -751,6 +784,41 @@ def _matches_query(article: NewsArticle, query: str) -> bool:
     if not tokens:
         return True
     return all(token in haystack for token in tokens)
+
+
+def _dedup_articles(articles: list[NewsArticle]) -> list[NewsArticle]:
+    deduped: dict[str, NewsArticle] = {}
+    for art in articles:
+        key = art.id or art.link or art.title
+        if not key:
+            continue
+        if key in deduped:
+            continue
+        deduped[key] = art
+    return list(deduped.values())
+
+
+def _gather_market_news_for_time_range(
+    *,
+    target_count: int,
+    include_default_queries: bool = True,
+) -> list[NewsArticle]:
+    queries: list[str] = []
+    if include_default_queries:
+        queries.extend(DEFAULT_MARKET_QUERIES)
+    queries.extend(MARKET_TIME_RANGE_QUERIES)
+
+    aggregated: list[NewsArticle] = []
+    per_query = min(200, max(20, target_count // max(1, len(queries)) + 8))
+
+    for q in queries:
+        try:
+            batch = get_market_news(count=per_query, query=q)
+        except Exception:
+            continue
+        aggregated.extend(batch)
+
+    return _dedup_articles(aggregated)
 
 
 def search_news(
@@ -795,7 +863,7 @@ def search_news(
         raise ValueError("count must be between 1 and 200")
 
     since_dt = _parse_datetime(since)
-    until_dt = _parse_datetime(until)
+    until_dt = _parse_datetime(until, end_of_day=True)
     if since_dt and until_dt and since_dt > until_dt:
         raise ValueError("since 不能晚于 until")
 
@@ -810,8 +878,13 @@ def search_news(
         # 走关键词通道（直接复用 get_market_news 的实现，传入 query）
         articles = get_market_news(count=fetch_count, query=query)
     else:
-        # 啥都没传 → 抓每日头条
-        articles = get_market_news(count=fetch_count)
+        # 啥都没传：
+        # 1) 无时间条件：抓每日头条
+        # 2) 有时间条件：扩展关键词池多轮抓取，提高时间区间命中率
+        if since_dt or until_dt:
+            articles = _gather_market_news_for_time_range(target_count=max(fetch_count, count * 6))
+        else:
+            articles = get_market_news(count=fetch_count)
 
     # ------------- 3. 关键词模糊过滤 -------------
     # ticker + query 组合时，需要在 ticker 结果上再用 query 过滤；
