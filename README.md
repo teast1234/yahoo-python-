@@ -149,9 +149,18 @@ python -m app.main MSFT --count 20 --tab all
 ```text
 newstock/
 ├── app/
-│   ├── main.py          # FastAPI + CLI 入口
-│   ├── news_service.py  # yfinance 封装
-│   └── models.py        # 响应模型
+│   ├── presentation/            # 接入层（HTTP/CLI）
+│   │   ├── http_api.py          # FastAPI 路由
+│   │   └── cli_app.py           # 命令行入口逻辑
+│   ├── services/                # 业务层（按职责拆分）
+│   │   ├── news_fetcher.py      # 新闻抓取（ticker/market）
+│   │   ├── article_content.py   # 文章正文抓取与解析
+│   │   ├── news_enricher.py     # 正文富化
+│   │   ├── news_search.py       # 统一搜索/过滤/排序
+│   │   └── common.py            # 公共常量与工具
+│   ├── news_service.py          # 兼容导出层
+│   ├── main.py                  # 薄入口（导出 app/run_cli）
+│   └── models.py                # 数据模型
 ├── requirements.txt
 └── README.md
 ```
