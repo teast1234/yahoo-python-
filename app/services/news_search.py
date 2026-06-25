@@ -4,7 +4,13 @@ from email.utils import parsedate_to_datetime
 
 from app.models import NewsArticle
 from app.services.article_content import fetch_article_content
-from app.services.common import CHINA_TZ, MARKET_TIME_RANGE_QUERIES, RateLimitError, dedup_articles
+from app.services.common import (
+    CHINA_TZ,
+    DEFAULT_MARKET_QUERIES,
+    MARKET_TIME_RANGE_QUERIES,
+    RateLimitError,
+    dedup_articles,
+)
 from app.services.news_fetcher import get_market_news, get_news
 
 
@@ -74,9 +80,7 @@ def _matches_query(article: NewsArticle, query: str) -> bool:
 
 def _gather_market_news_for_time_range(*, target_count: int) -> list[NewsArticle]:
     queries = [
-        "stock market",
-        "finance",
-        "economy",
+        *DEFAULT_MARKET_QUERIES,
         *MARKET_TIME_RANGE_QUERIES,
     ]
     aggregated: list[NewsArticle] = []

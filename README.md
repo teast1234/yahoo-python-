@@ -1,6 +1,7 @@
 # Yahoo Finance News (Python + yfinance)
 
 使用 Python 和 [yfinance](https://github.com/ranaroussi/yfinance) 获取 Yahoo 财经新闻，支持命令行和 HTTP API。
+新闻来源于yfinance和yahoo的公共接口，只能获取到当天的新闻数据，并且只支持股票和关键词搜索
 
 ## 环境要求
 
@@ -107,7 +108,7 @@ python -m app.main MSFT --count 20 --tab all
 
 `since` / `until` 任意组合：单传则形成开区间；都不传则返回最新新闻。
 
-说明：当仅传时间、不传 `query` 时，系统会自动扩展多个财经主题关键词进行聚合抓取，再执行时间过滤，以尽量返回满足 `count` 的结果。
+说明：当仅传时间、不传 `query` 时，系统会自动使用两组可配置关键词池（默认池 + 时间增强池）进行聚合抓取，再执行时间过滤，以尽量返回满足 `count` 的结果。
 
 ### `/api/news/{ticker}` 参数（旧接口）
 
