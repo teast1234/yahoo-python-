@@ -6,8 +6,22 @@ import uvicorn
 from app.models import NewsResponse
 from app.news_service import VALID_TABS, RateLimitError, fetch_article_content, search_news
 
+BANNER = (
+    " ╔═══════════════════════════════════════╗\n"
+    " ║   █████  ███   ██ ██   ██ ███████   ║\n"
+    " ║  ██   ██ ████  ██ ██   ██ ██        ║\n"
+    " ║  ███████ ██ ██ ██ ██   ██ ███████   ║\n"
+    " ║  ██   ██ ██  ████ ██   ██      ██   ║\n"
+    " ║  ██   ██ ██   ███ ███████ ███████   ║\n"
+    " ╚═══════════════════════════════════════╝\n"
+    "     (◕‿◕)♡  Analyst Core  Booting...\n"
+    "    ✦  Loading Neural Engine  ✦ 100% ✦\n"
+    "    ═══════════════════════════════"
+)
+
 
 def run_cli() -> None:
+    print(BANNER)
     parser = argparse.ArgumentParser(description="Fetch Yahoo Finance news via yfinance")
     parser.add_argument("ticker", nargs="?", help="Stock ticker, e.g. AAPL")
     parser.add_argument("--count", type=int, default=10, help="Number of articles (1-200)")
