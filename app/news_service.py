@@ -1,4 +1,5 @@
 from app.services import (
+    SUPPORTED_MARKETS,
     VALID_TABS,
     RateLimitError,
     fetch_article_content,
@@ -10,6 +11,7 @@ from app.services import (
 
 __all__ = [
     "VALID_TABS",
+    "SUPPORTED_MARKETS",
     "RateLimitError",
     "fetch_article_content",
     "get_market_news",

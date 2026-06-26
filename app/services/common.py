@@ -5,16 +5,21 @@ from pathlib import Path
 from app.models import NewsArticle
 
 VALID_TABS = {"news", "all", "press releases"}
+SUPPORTED_MARKETS = {"us", "hk"}
 RETRY_DELAYS_SECONDS = (3, 8, 15)
 TAB_QUERY_REFS = {
     "all": "newsAll",
     "news": "latestNews",
     "press releases": "pressRelease",
 }
+MARKET_REGION_LANG = {
+    "us": ("US", "en-US"),
+    "hk": ("HK", "zh-Hant-HK"),
+}
 YAHOO_NEWS_URL = "https://finance.yahoo.com/xhr/ncp?queryRef={query_ref}&serviceKey=ncp_fin"
 YAHOO_SEARCH_URL = (
     "https://query1.finance.yahoo.com/v1/finance/search"
-    "?q={query}&newsCount={count}&quotesCount=0&lang=en-US&region=US"
+    "?q={query}&newsCount={count}&quotesCount=0&lang={lang}&region={region}"
 )
 
 _BUILTIN_DEFAULT_MARKET_QUERIES = (
@@ -107,6 +112,14 @@ def _load_market_query_pools() -> tuple[tuple[str, ...], tuple[str, ...]]:
     default_queries = _normalize_queries(raw.get("default_market_queries"), _BUILTIN_DEFAULT_MARKET_QUERIES)
     time_range_queries = _normalize_queries(raw.get("market_time_range_queries"), _BUILTIN_MARKET_TIME_RANGE_QUERIES)
     return default_queries, time_range_queries
+
+
+def resolve_market_region(market: str | None) -> tuple[str, str, str]:
+    market_key = (market or "us").strip().lower()
+    if market_key not in SUPPORTED_MARKETS:
+        raise ValueError(f"Invalid market '{market}'. Choose from: {', '.join(sorted(SUPPORTED_MARKETS))}")
+    region, lang = MARKET_REGION_LANG[market_key]
+    return market_key, region, lang
 
 
 DEFAULT_MARKET_QUERIES, MARKET_TIME_RANGE_QUERIES = _load_market_query_pools()

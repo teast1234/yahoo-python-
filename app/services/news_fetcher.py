@@ -17,6 +17,7 @@ from app.services.common import (
     YAHOO_SEARCH_URL,
     RateLimitError,
     extract_url,
+    resolve_market_region,
     text_or_none,
 )
 
@@ -100,8 +101,13 @@ def _fetch_via_yfinance_search(query: str, count: int) -> list[NewsArticle]:
     return [_map_search_news_item(item) for item in news if not item.get("ad")]
 
 
-def _fetch_via_yahoo_search_api(query: str, count: int) -> list[NewsArticle]:
-    url = YAHOO_SEARCH_URL.format(query=urllib.parse.quote_plus(query), count=count)
+def _fetch_via_yahoo_search_api(query: str, count: int, *, region: str, lang: str) -> list[NewsArticle]:
+    url = YAHOO_SEARCH_URL.format(
+        query=urllib.parse.quote_plus(query),
+        count=count,
+        region=urllib.parse.quote_plus(region),
+        lang=urllib.parse.quote_plus(lang),
+    )
     request = urllib.request.Request(
         url,
         headers={
@@ -131,7 +137,9 @@ def get_news(ticker: str, count: int = 10, tab: str = "news") -> list[NewsArticl
     if normalized_tab not in VALID_TABS:
         raise ValueError(f"Invalid tab '{tab}'. Choose from: {', '.join(sorted(VALID_TABS))}")
 
-    symbol = ticker.upper()
+    symbol = ticker.strip().upper()
+    if not symbol:
+        raise ValueError("ticker cannot be empty")
     yfinance_rate_limited = False
     for attempt in range(len(RETRY_DELAYS_SECONDS) + 1):
         if attempt > 0:
@@ -154,9 +162,11 @@ def get_news(ticker: str, count: int = 10, tab: str = "news") -> list[NewsArticl
     raise RateLimitError("Yahoo Finance 请求过于频繁，已被限流。请等待 5-10 分钟后再试。")
 
 
-def get_market_news(count: int = 20, query: str | None = None) -> list[NewsArticle]:
+def get_market_news(count: int = 20, query: str | None = None, market: str = "us") -> list[NewsArticle]:
     if count < 1 or count > 200:
         raise ValueError("count must be between 1 and 200")
+
+    _, region, lang = resolve_market_region(market)
 
     queries: tuple[str, ...] | list[str]
     if query:
@@ -188,7 +198,7 @@ def get_market_news(count: int = 20, query: str | None = None) -> list[NewsArtic
 
         if articles is None:
             try:
-                articles = _fetch_via_yahoo_search_api(q, per_query)
+                articles = _fetch_via_yahoo_search_api(q, per_query, region=region, lang=lang)
             except RateLimitError:
                 raise
             except Exception as exc:
@@ -206,10 +216,10 @@ def get_market_news(count: int = 20, query: str | None = None) -> list[NewsArtic
             break
 
     if not aggregated:
-        if yfinance_rate_limited:
-            raise RateLimitError("Yahoo Finance 请求过于频繁，已被限流。请等待 5-10 分钟后再试。")
         if last_error is not None:
             raise RuntimeError(f"Failed to fetch market news: {last_error}") from last_error
+        if yfinance_rate_limited:
+            raise RateLimitError("Yahoo Finance 请求过于频繁，已被限流。请等待 5-10 分钟后再试。")
         return []
 
     results = list(aggregated.values())

@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, Query
 
 from app.models import NewsResponse
 from app.news_service import (
+    SUPPORTED_MARKETS,
     RateLimitError,
     fetch_article_content,
     get_market_news,
@@ -28,6 +29,8 @@ def root() -> dict:
             "/api/search?ticker=AAPL&query=iphone",
             "/api/search?since=2026-06-01&until=2026-06-23",
             "/api/search?count=20",
+            "/api/search/market?market=us&query=AI&count=10",
+            "/api/search/market?market=hk&query=%E6%81%92%E7%94%9F%E6%8C%87%E6%95%B0&count=10",
             "/api/news/AAPL?count=5&tab=news",
             "/api/news?count=20",
             "/api/article?link=https://finance.yahoo.com/m/<uuid>/...",
@@ -172,7 +175,7 @@ def search(
         raise HTTPException(status_code=502, detail=f"Failed to search news: {exc}") from exc
 
     if ticker:
-        resp_ticker = ticker.upper()
+        resp_ticker = ticker.strip().upper()
         resp_tab = tab.lower() if not query else f"{tab.lower()}|q={query}"
     elif query:
         resp_ticker = "SEARCH"
@@ -180,6 +183,65 @@ def search(
     else:
         resp_ticker = "MARKET"
         resp_tab = "headlines"
+
+    return NewsResponse(
+        ticker=resp_ticker,
+        tab=resp_tab,
+        count=len(articles),
+        articles=articles,
+    )
+
+
+@app.get("/api/search/market", response_model=NewsResponse)
+def search_by_market(
+    market: str = Query(default="us", description="地区市场：us 或 hk"),
+    ticker: str | None = Query(default=None, description="股票代码，例如 AAPL 或 0700.HK"),
+    query: str | None = Query(default=None, description="关键词模糊搜索；与 ticker 可同时使用"),
+    since: str | None = Query(
+        default=None,
+        description="起始时间，支持 YYYY-MM-DD / YYYY-MM-DD HH:MM / ISO8601",
+    ),
+    until: str | None = Query(
+        default=None,
+        description="截止时间，支持 YYYY-MM-DD / YYYY-MM-DD HH:MM / ISO8601",
+    ),
+    count: int = Query(default=20, ge=1, le=200),
+    tab: str = Query(default="news", description="仅 ticker 模式生效：news / all / press releases"),
+    with_content: bool = Query(default=False, description="是否抓取每条新闻的正文"),
+    max_articles: int = Query(default=5, ge=1, le=20),
+) -> NewsResponse:
+    if market.strip().lower() not in SUPPORTED_MARKETS:
+        raise HTTPException(status_code=400, detail=f"Invalid market '{market}'. Choose from: {', '.join(sorted(SUPPORTED_MARKETS))}")
+
+    normalized_market = market.strip().lower()
+    try:
+        articles = search_news(
+            ticker=ticker,
+            query=query,
+            since=since,
+            until=until,
+            count=count,
+            tab=tab,
+            with_content=with_content,
+            max_articles=max_articles,
+            market=normalized_market,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RateLimitError as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to search news: {exc}") from exc
+
+    if ticker:
+        resp_ticker = ticker.strip().upper()
+        resp_tab = f"{tab.lower()}|m={normalized_market}" if not query else f"{tab.lower()}|m={normalized_market}|q={query}"
+    elif query:
+        resp_ticker = f"SEARCH-{normalized_market.upper()}"
+        resp_tab = f"m={normalized_market}|q={query}"
+    else:
+        resp_ticker = f"MARKET-{normalized_market.upper()}"
+        resp_tab = f"headlines|m={normalized_market}"
 
     return NewsResponse(
         ticker=resp_ticker,
