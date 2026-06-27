@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.models import NewsResponse
 from app.news_service import (
@@ -15,6 +16,14 @@ app = FastAPI(
     title="Yahoo Finance News",
     description="Fetch Yahoo Finance news via yfinance",
     version="1.0.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
